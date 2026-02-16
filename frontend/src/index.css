@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@plugin "@tailwindcss/typography";
+
+@theme {
+  /* Add custom theme configuration here if needed */
+}

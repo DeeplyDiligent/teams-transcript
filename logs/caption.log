@@ -1,0 +1,221 @@
+Starting Teams Caption Monitor...
+Looking for Teams meeting window...
+Database initialized: transcripts.db
+
+Meeting: Meeting with Deep Bhattacharyya | Microsoft | deepbh@microsoft.com | Microsoft T...
+Transcript file: Meeting with Deep Bhattacharyya - Microsoft - deepbhmicrosoftcom - Microsoft Teams_20260214_215852.md
+Database: transcripts.db (meeting_id: 14)
+
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:58:52
+Total captions: 11
+Participants: 1
+New/Changed: 11
+================================================================================
+
+[21:58:52] Deep Bhattacharyya:
+  Let's break it down into four sort of categories.
+
+[21:58:52] Deep Bhattacharyya:
+  You got compute bandwidth requests and like special add-on services, right?
+
+[21:58:52] Deep Bhattacharyya:
+  So compute is when your application actually needs to run some processes, right?
+
+[21:58:52] Deep Bhattacharyya:
+  Whether it's it's fetching data from the database, looping over arrays, whether it's handling a URL and routing it to wherever you go that.
+
+[21:58:52] Deep Bhattacharyya:
+  Is.
+
+
+(Showing last 5 captions)
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:58:59
+Total captions: 11
+Participants: 1
+================================================================================
+
+[21:58:52] Deep Bhattacharyya:
+  Let's break it down into four sort of categories.
+
+[21:58:52] Deep Bhattacharyya:
+  You got compute bandwidth requests and like special add-on services, right?
+
+[21:58:52] Deep Bhattacharyya:
+  So compute is when your application actually needs to run some processes, right?
+
+[21:58:52] Deep Bhattacharyya:
+  Whether it's it's fetching data from the database, looping over arrays, whether it's handling a URL and routing it to wherever you go that.
+
+[21:58:52] Deep Bhattacharyya:
+  Is.
+
+
+(Showing last 5 captions)
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:59:05
+Total captions: 11
+Participants: 1
+================================================================================
+
+[21:58:52] Deep Bhattacharyya:
+  Let's break it down into four sort of categories.
+
+[21:58:52] Deep Bhattacharyya:
+  You got compute bandwidth requests and like special add-on services, right?
+
+[21:58:52] Deep Bhattacharyya:
+  So compute is when your application actually needs to run some processes, right?
+
+[21:58:52] Deep Bhattacharyya:
+  Whether it's it's fetching data from the database, looping over arrays, whether it's handling a URL and routing it to wherever you go that.
+
+[21:58:52] Deep Bhattacharyya:
+  Is.
+
+
+(Showing last 5 captions)
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:59:13
+Total captions: 11
+Participants: 1
+================================================================================
+
+[21:58:52] Deep Bhattacharyya:
+  Let's break it down into four sort of categories.
+
+[21:58:52] Deep Bhattacharyya:
+  You got compute bandwidth requests and like special add-on services, right?
+
+[21:58:52] Deep Bhattacharyya:
+  So compute is when your application actually needs to run some processes, right?
+
+[21:58:52] Deep Bhattacharyya:
+  Whether it's it's fetching data from the database, looping over arrays, whether it's handling a URL and routing it to wherever you go that.
+
+[21:58:52] Deep Bhattacharyya:
+  Is.
+
+
+(Showing last 5 captions)
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:59:19
+Total captions: 12
+Participants: 1
+New/Changed: 1
+================================================================================
+
+[21:58:52] Deep Bhattacharyya:
+  You got compute bandwidth requests and like special add-on services, right?
+
+[21:58:52] Deep Bhattacharyya:
+  So compute is when your application actually needs to run some processes, right?
+
+[21:58:52] Deep Bhattacharyya:
+  Whether it's it's fetching data from the database, looping over arrays, whether it's handling a URL and routing it to wherever you go that.
+
+[21:58:52] Deep Bhattacharyya:
+  Is.
+
+[21:59:19] Deep Bhattacharyya:
+  Is when your server actually needs to do work and almost all of the content
+
+
+(Showing last 5 captions)
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:59:25
+Total captions: 13
+Participants: 1
+New/Changed: 1
+================================================================================
+
+[21:58:52] Deep Bhattacharyya:
+  So compute is when your application actually needs to run some processes, right?
+
+[21:58:52] Deep Bhattacharyya:
+  Whether it's it's fetching data from the database, looping over arrays, whether it's handling a URL and routing it to wherever you go that.
+
+[21:58:52] Deep Bhattacharyya:
+  Is.
+
+[21:59:19] Deep Bhattacharyya:
+  Is when your server actually needs to do work, and almost all of the content on this website actually is fairly static content, right?
+
+[21:59:25] Deep Bhattacharyya:
+  If you if you go ahead and look at
+
+
+(Showing last 5 captions)
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:59:30
+Total captions: 14
+Participants: 1
+New/Changed: 1
+================================================================================
+
+[21:58:52] Deep Bhattacharyya:
+  Whether it's it's fetching data from the database, looping over arrays, whether it's handling a URL and routing it to wherever you go that.
+
+[21:58:52] Deep Bhattacharyya:
+  Is.
+
+[21:59:19] Deep Bhattacharyya:
+  Is when your server actually needs to do work, and almost all of the content on this website actually is fairly static content, right?
+
+[21:59:25] Deep Bhattacharyya:
+  If you if you go ahead and look at a lot of these requests that are coming in, you'll see that it's it's just Jason that's that's coming in, right.
+
+[21:59:30] Deep Bhattacharyya:
+  So it's it's just
+
+
+(Showing last 5 captions)
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:59:36
+Total captions: 16
+Participants: 1
+New/Changed: 2
+================================================================================
+
+[21:59:19] Deep Bhattacharyya:
+  Is when your server actually needs to do work, and almost all of the content on this website actually is fairly static content, right?
+
+[21:59:25] Deep Bhattacharyya:
+  If you if you go ahead and look at a lot of these requests that are coming in, you'll see that it's it's just Jason that's that's coming in, right.
+
+[21:59:30] Deep Bhattacharyya:
+  So it's it's just text.
+
+[21:59:36] Deep Bhattacharyya:
+  Text can be cached.
+
+[21:59:36] Deep Bhattacharyya:
+  Very heavily. The stuff on here is not changing very often.
+
+
+(Showing last 5 captions)
+================================================================================
+TEAMS LIVE TRANSCRIPT
+================================================================================
+Time: 2026-02-14 21:59:42
+Total captions: 19
+Participants: 1
+New/Changed: 3
+================================================================================

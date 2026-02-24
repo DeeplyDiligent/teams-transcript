@@ -11,7 +11,7 @@ import sys
 from flask import Flask, jsonify, send_from_directory, Response, request
 from flask_cors import CORS
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DB_PATH = 'transcripts.db'
 
@@ -107,32 +107,103 @@ def create_app(static_folder='frontend/dist'):
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/meetings/<int:meeting_id>', methods=['PUT'])
+    def update_meeting(meeting_id):
+        """Update meeting details (name)."""
+        try:
+            data = request.get_json()
+            if not data or 'meeting_name' not in data:
+                return jsonify({'error': 'meeting_name is required'}), 400
+            
+            meeting_name = data['meeting_name'].strip()
+            if not meeting_name:
+                return jsonify({'error': 'meeting_name cannot be empty'}), 400
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Check if meeting exists
+            cursor.execute('SELECT meeting_id FROM meetings WHERE meeting_id = ?', (meeting_id,))
+            if not cursor.fetchone():
+                conn.close()
+                return jsonify({'error': 'Meeting not found'}), 404
+            
+            # Update meeting name
+            cursor.execute('''
+                UPDATE meetings 
+                SET meeting_name = ?
+                WHERE meeting_id = ?
+            ''', (meeting_name, meeting_id))
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'meeting_id': meeting_id,
+                'meeting_name': meeting_name
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/meetings/<int:meeting_id>/captions', methods=['GET'])
     def get_captions(meeting_id):
         """Stream captions for a meeting using Server-Sent Events."""
+        # Get optional limit parameter
+        limit = request.args.get('limit')
+        caption_limit = None
+        if limit:
+            try:
+                caption_limit = int(limit)
+            except ValueError:
+                caption_limit = None
+        
         def generate():
             last_caption_id = 0
             seen_captions = {}  # Track caption_id -> updated_at
             
-            # Send initial batch of all captions
+            # Send initial batch of all captions (or limited)
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
                 
-                cursor.execute('''
-                    SELECT 
-                        caption_id,
-                        meeting_id,
-                        runtime_id,
-                        speaker,
-                        text,
-                        timestamp,
-                        created_at,
-                        updated_at
-                    FROM captions
-                    WHERE meeting_id = ?
-                    ORDER BY timestamp ASC
-                ''', (meeting_id,))
+                # Build query with optional limit
+                if caption_limit:
+                    # Get last N captions
+                    cursor.execute('''
+                        SELECT 
+                            caption_id,
+                            meeting_id,
+                            runtime_id,
+                            speaker,
+                            text,
+                            timestamp,
+                            created_at,
+                            updated_at
+                        FROM captions
+                        WHERE meeting_id = ?
+                        ORDER BY timestamp DESC
+                        LIMIT ?
+                    ''', (meeting_id, caption_limit))
+                    rows = cursor.fetchall()
+                    # Reverse to get chronological order
+                    rows = list(reversed(rows))
+                else:
+                    # Get all captions
+                    cursor.execute('''
+                        SELECT 
+                            caption_id,
+                            meeting_id,
+                            runtime_id,
+                            speaker,
+                            text,
+                            timestamp,
+                            created_at,
+                            updated_at
+                        FROM captions
+                        WHERE meeting_id = ?
+                        ORDER BY timestamp ASC
+                    ''', (meeting_id,))
                 
                 rows = cursor.fetchall()
                 conn.close()
@@ -174,20 +245,49 @@ def create_app(static_folder='frontend/dist'):
                     cursor = conn.cursor()
                     
                     # Get new captions and updated captions
-                    cursor.execute('''
-                        SELECT 
-                            caption_id,
-                            meeting_id,
-                            runtime_id,
-                            speaker,
-                            text,
-                            timestamp,
-                            created_at,
-                            updated_at
-                        FROM captions
-                        WHERE meeting_id = ?
-                        ORDER BY caption_id ASC
-                    ''', (meeting_id,))
+                    # If we have a caption_limit, only check captions within the window
+                    if caption_limit:
+                        # Get captions from the last N, plus any new ones beyond that
+                        cursor.execute('''
+                            SELECT 
+                                caption_id,
+                                meeting_id,
+                                runtime_id,
+                                speaker,
+                                text,
+                                timestamp,
+                                created_at,
+                                updated_at
+                            FROM captions
+                            WHERE meeting_id = ?
+                            AND caption_id >= (
+                                SELECT COALESCE(MIN(caption_id), 0)
+                                FROM (
+                                    SELECT caption_id
+                                    FROM captions
+                                    WHERE meeting_id = ?
+                                    ORDER BY timestamp DESC
+                                    LIMIT ?
+                                )
+                            )
+                            ORDER BY caption_id ASC
+                        ''', (meeting_id, meeting_id, caption_limit))
+                    else:
+                        # No limit, get all captions
+                        cursor.execute('''
+                            SELECT 
+                                caption_id,
+                                meeting_id,
+                                runtime_id,
+                                speaker,
+                                text,
+                                timestamp,
+                                created_at,
+                                updated_at
+                            FROM captions
+                            WHERE meeting_id = ?
+                            ORDER BY caption_id ASC
+                        ''', (meeting_id,))
                     
                     rows = cursor.fetchall()
                     conn.close()
@@ -246,6 +346,8 @@ def create_app(static_folder='frontend/dist'):
         try:
             data = request.json
             user_message = data.get('message', '')
+            no_save = request.args.get('no_save', 'false').lower() == 'true'
+            limit = request.args.get('limit')  # Optional: limit to last N captions
             
             if not user_message:
                 return jsonify({'error': 'Message is required'}), 400
@@ -254,14 +356,48 @@ def create_app(static_folder='frontend/dist'):
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            cursor.execute('''
-                SELECT speaker, text, timestamp
-                FROM captions
-                WHERE meeting_id = ?
-                ORDER BY timestamp ASC
-            ''', (meeting_id,))
-            
-            captions = cursor.fetchall()
+            # Build query with optional caption limit
+            if limit:
+                try:
+                    caption_limit = int(limit)
+                    # Get the last N captions
+                    cursor.execute('''
+                        SELECT speaker, text, timestamp
+                        FROM captions
+                        WHERE meeting_id = ?
+                        ORDER BY timestamp DESC
+                        LIMIT ?
+                    ''', (meeting_id, caption_limit))
+                    captions = cursor.fetchall()
+                    # Reverse to get chronological order
+                    captions = list(reversed(captions))
+                    
+                    # If no captions found, fall back to all captions
+                    if not captions:
+                        cursor.execute('''
+                            SELECT speaker, text, timestamp
+                            FROM captions
+                            WHERE meeting_id = ?
+                            ORDER BY timestamp ASC
+                        ''', (meeting_id,))
+                        captions = cursor.fetchall()
+                except ValueError:
+                    # Invalid limit, get all
+                    cursor.execute('''
+                        SELECT speaker, text, timestamp
+                        FROM captions
+                        WHERE meeting_id = ?
+                        ORDER BY timestamp ASC
+                    ''', (meeting_id,))
+                    captions = cursor.fetchall()
+            else:
+                cursor.execute('''
+                    SELECT speaker, text, timestamp
+                    FROM captions
+                    WHERE meeting_id = ?
+                    ORDER BY timestamp ASC
+                ''', (meeting_id,))
+                captions = cursor.fetchall()
             
             if not captions:
                 conn.close()
@@ -292,19 +428,44 @@ def create_app(static_folder='frontend/dist'):
             
             transcript_context = "\n".join(transcript_text)
             
-            # Get chat history for conversation context
-            cursor.execute('''
-                SELECT role, content, timestamp
-                FROM chat_messages
-                WHERE meeting_id = ?
-                ORDER BY timestamp ASC
-            ''', (meeting_id,))
+            # Get chat history for conversation context (skip if no_save mode)
+            chat_history = []
+            if not no_save:
+                cursor.execute('''
+                    SELECT role, content, timestamp
+                    FROM chat_messages
+                    WHERE meeting_id = ?
+                    ORDER BY timestamp ASC
+                ''', (meeting_id,))
+                chat_history = cursor.fetchall()
             
-            chat_history = cursor.fetchall()
             conn.close()
             
-            # Build system prompt
-            system_prompt = f"""My name is Deep Bhattacharyya. You are analyzing a Teams meeting transcript between me and others. Here is the full transcript:
+            # Build system prompt based on mode
+            if no_save:
+                # Live mode: focused on suggesting what to say next
+                system_prompt = f"""You are Deep Bhattacharyya's AI assistant helping him respond in real-time during a Teams meeting. Here is the recent conversation between him and someone else:
+
+{transcript_context}
+
+Deep is asking "What should I say next?" 
+
+Spilt each response into this template:
+
+# Suggested Response
+
+[Your suggested response to the customer's question(s) goes here. Be concise and actionable, as if you are giving Deep a quick script to say next in the meeting.]
+
+# Discovery Questions
+
+[List any discovery questions Deep should ask the customer to better understand their needs. Be specific and relevant to the conversation.]
+
+Use dot points and be clear and concise. Bold certain text thats important to emphasize. Do not include any reasoning or explanation - just give the final output in the format above.
+
+"""
+            else:
+                # Regular chat mode: detailed analysis
+                system_prompt = f"""My name is Deep Bhattacharyya. You are analyzing a Teams meeting transcript between me and others. Here is the full transcript:
 
 {transcript_context}
 

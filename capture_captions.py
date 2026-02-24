@@ -8,7 +8,7 @@ import time
 import os
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pywinauto import Desktop
 
 # Configuration
@@ -130,18 +130,17 @@ class TranscriptDatabase:
         #     cursor.execute('INSERT INTO schema_version (version) VALUES (3)')
         #     print("[DB] Migration 3: Description")
     
-    def find_meeting_by_window(self, window_id, meeting_name):
-        """Find an existing meeting by window_id and meeting_name."""
+    def find_last_meeting(self):
+        """Get the last meeting in the database."""
         with self.lock:
             cursor = self.conn.cursor()
             cursor.execute('''
-                SELECT meeting_id FROM meetings 
-                WHERE window_id = ? AND meeting_name = ?
+                SELECT meeting_id, window_id, window_title FROM meetings 
                 ORDER BY start_time DESC
                 LIMIT 1
-            ''', (window_id, meeting_name))
+            ''')
             result = cursor.fetchone()
-            return result[0] if result else None
+            return (result[0], result[1], result[2]) if result else (None, None, None)
     
     def create_meeting(self, meeting_name, window_title, window_id=None):
         """Create a new meeting record."""
@@ -153,6 +152,17 @@ class TranscriptDatabase:
             ''', (meeting_name, window_title, window_id, datetime.now(), datetime.now()))
             self.conn.commit()
             return cursor.lastrowid
+    
+    def update_meeting_info(self, meeting_id, meeting_name, window_title):
+        """Update meeting name and window title."""
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                UPDATE meetings
+                SET meeting_name = ?, window_title = ?
+                WHERE meeting_id = ?
+            ''', (meeting_name, window_title, meeting_id))
+            self.conn.commit()
     
     def update_meeting_activity(self, meeting_id):
         """Update last activity timestamp for a meeting."""
@@ -259,7 +269,9 @@ def get_teams_window():
                 # Check if this is a meeting window by looking for meeting controls
                 if is_meeting_window(window):
                     return window
-        except:
+        except Exception as e:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            print(f"[{timestamp}] [CAPTURE] [DEBUG] Error checking window: {e}")
             continue
     return None
 
@@ -267,15 +279,27 @@ def get_teams_window():
 def is_meeting_window(window):
     """Check if a Teams window is a meeting by looking for meeting-specific controls."""
     try:
-        for elem in window.descendants():
+        descendants = window.descendants()
+    except (KeyError, AttributeError) as e:
+        # Handle cases where UI elements have None control_type or other issues
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        print(f"[{timestamp}] [CAPTURE] [DEBUG] Cannot get window descendants: {e}")
+        return False
+    
+    try:
+        for elem in descendants:
             try:
                 name = getattr(elem.element_info, 'name', '')
                 # Look for meeting-specific UI elements
                 if name and any(keyword in str(name).lower() for keyword in ['meeting controls', 'leave call', 'calling controls']):
                     return True
-            except:
+            except Exception as e:
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                print(f"[{timestamp}] [CAPTURE] [DEBUG] Error checking element: {e}")
                 continue
-    except:
+    except Exception as e:
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        print(f"[{timestamp}] [CAPTURE] [DEBUG] Error iterating descendants: {e}")
         pass
     return False
 
@@ -295,7 +319,9 @@ def get_teams_window_with_captions():
                 live_captions = get_live_captions_group(window)
                 if live_captions:
                     windows_with_captions.append(window)
-        except:
+        except Exception as e:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            print(f"[{timestamp}] [CAPTURE] [DEBUG] Error checking window for captions: {e}")
             continue
     
     if not windows_with_captions:
@@ -310,7 +336,9 @@ def get_teams_window_with_captions():
         try:
             if window.has_focus():
                 return window
-        except:
+        except Exception as e:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            print(f"[{timestamp}] [CAPTURE] [DEBUG] Error checking window focus: {e}")
             continue
     
     # No focused window found, return the first one
@@ -319,14 +347,23 @@ def get_teams_window_with_captions():
 
 def get_live_captions_group(teams_window):
     """Find the Live Captions group in Teams window."""
-    for elem in teams_window.descendants():
+    try:
+        descendants = teams_window.descendants()
+    except (KeyError, AttributeError) as e:
+        # Handle cases where UI elements have None control_type or other issues
+        print(f"[CAPTURE] Warning: Could not get descendants: {e}")
+        return None
+    
+    for elem in descendants:
         try:
             name = getattr(elem.element_info, 'name', '')
             elem_type = elem.element_info.control_type
             
             if elem_type == 'Group' and 'live captions' in str(name).lower():
                 return elem
-        except:
+        except Exception as e:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            print(f"[{timestamp}] [CAPTURE] [DEBUG] Error checking element for captions: {e}")
             continue
     return None
 
@@ -338,10 +375,17 @@ def extract_captions(live_captions_group):
     try:
         children = live_captions_group.children()
         if not children:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            print(f"[{timestamp}] [CAPTURE] [DEBUG] No children found in live captions group")
             return captions
             
         caption_container = children[0]
         inner_children = caption_container.children()
+        
+        if not inner_children:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            print(f"[{timestamp}] [CAPTURE] [DEBUG] No inner children found in caption container")
+            return captions
         
         for child in inner_children:
             try:
@@ -365,11 +409,16 @@ def extract_captions(live_captions_group):
                                 'text': caption_text,
                                 'timestamp': datetime.now()
                             }
-            except:
+            except Exception as e:
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                print(f"[{timestamp}] [CAPTURE] [DEBUG] Error processing caption element: {e}")
                 continue
                 
     except Exception as e:
-        print(f"Error extracting captions: {e}")
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        print(f"[{timestamp}] [CAPTURE] [ERROR] Error extracting captions: {e}")
+        import traceback
+        traceback.print_exc()
     
     return captions
 
@@ -396,6 +445,16 @@ def sanitize_filename(title):
     # Limit length and remove extra spaces
     safe_title = ' '.join(safe_title.split())[:100]
     return safe_title
+
+
+def extract_meeting_name(window_title):
+    """Extract meeting name from window title (everything before first |)."""
+    if not window_title:
+        return 'Untitled Meeting'
+    # Split by | and take first part, then strip whitespace
+    parts = window_title.split('|')
+    meeting_name = parts[0].strip()
+    return meeting_name if meeting_name else 'Untitled Meeting'
 
 
 def export_to_markdown(db, meeting_id, filename):
@@ -529,29 +588,88 @@ def main():
     stop_export = None
     main.last_stats_log = 0  # Track last stats log time
     main.last_caption_count = 0  # Track caption count for stats logging
+    cached_teams_window = None  # Cache window to avoid re-scanning every iteration
+    cached_live_captions = None  # Cache live captions UI element
     
     try:
         while True:
             iteration += 1
             
-            # Find Teams window with live captions enabled
-            teams_window = get_teams_window_with_captions()
+            # Find Teams window with live captions enabled (use cached if available)
+            # Try to use cached window first
+            teams_window = None
+            if cached_teams_window:
+                try:
+                    # Verify cached window is still valid
+                    _ = cached_teams_window.window_text()
+                    teams_window = cached_teams_window
+                except Exception as e:
+                    # Window became invalid, need to re-find
+                    timestamp = datetime.now().strftime('%H:%M:%S')
+                    print(f"[{timestamp}] [CAPTURE] [DEBUG] Cached window became invalid: {e}")
+                    cached_teams_window = None
+            
+            # Find new window if cache is empty or invalid
+            if not teams_window:
+                teams_window = get_teams_window_with_captions()
+                if teams_window:
+                    cached_teams_window = teams_window
+                    timestamp = datetime.now().strftime('%H:%M:%S')
+                    print(f"[{timestamp}] [CAPTURE] [DEBUG] Found and cached new Teams window")
+            
             if not teams_window:
                 if iteration % 10 == 0:  # Print less frequently
-                    print("[CAPTURE] Waiting for Teams meeting window with Live Captions enabled...")
+                    timestamp = datetime.now().strftime('%H:%M:%S')
+                    print(f"[{timestamp}] [CAPTURE] Waiting for Teams meeting window with Live Captions enabled...")
                 time.sleep(5)
                 continue
             
             # Check meeting name
             try:
                 window_title = teams_window.window_text()
-            except:
+            except Exception as e:
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                print(f"[{timestamp}] [CAPTURE] [DEBUG] Cannot get window title: {e}")
                 window_title = "Teams Meeting"
             
-            # Get Live Captions group (we know it exists from find)
-            live_captions = get_live_captions_group(teams_window)
+            # Get Live Captions group (use cached if available)
+            # Try to use cached live captions first
+            live_captions = None
+            
+            if cached_live_captions:
+                try:
+                    # Verify cached element is still valid AND has children
+                    children = cached_live_captions.children()
+                    if children and len(children) > 0:
+                        live_captions = cached_live_captions
+                    else:
+                        # Element exists but has no children - it's stale
+                        timestamp = datetime.now().strftime('%H:%M:%S')
+                        print(f"[{timestamp}] [CAPTURE] [DEBUG] Cached element has no children, forcing refresh")
+                        cached_live_captions = None
+                except Exception as e:
+                    # Element became invalid, need to re-find
+                    timestamp = datetime.now().strftime('%H:%M:%S')
+                    print(f"[{timestamp}] [CAPTURE] [DEBUG] Cached live captions element became invalid: {e}")
+                    cached_live_captions = None
+            
+            # Find new element if cache is empty or invalid
             if not live_captions:
-                # Captions disappeared, loop back to find another window
+                live_captions = get_live_captions_group(teams_window)
+                if live_captions:
+                    cached_live_captions = live_captions
+                    timestamp = datetime.now().strftime('%H:%M:%S')
+                    print(f"[{timestamp}] [CAPTURE] [DEBUG] Found and cached live captions element")
+                else:
+                    timestamp = datetime.now().strftime('%H:%M:%S')
+                    print(f"[{timestamp}] [CAPTURE] [WARN] Live captions element not found in window")
+            
+            if not live_captions:
+                # Captions disappeared, clear cache and loop back to find another window
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                print(f"[{timestamp}] [CAPTURE] [DEBUG] Captions not available, clearing cache and retrying...")
+                cached_teams_window = None
+                cached_live_captions = None
                 time.sleep(5)
                 continue
             
@@ -568,19 +686,28 @@ def main():
                         export_to_markdown(db, current_meeting_id, transcript_filename)
                         print(f"[CAPTURE] Saved: {transcript_filename}")
                 
+                # Clear caches on meeting change
+                cached_teams_window = None
+                cached_live_captions = None
+                
                 # Find or create meeting (only now that we confirmed live captions exist)
                 safe_name = sanitize_filename(window_title)
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                meeting_display_name = window_title[:80] + "..." if len(window_title) > 80 else window_title
+                meeting_display_name = extract_meeting_name(window_title)
                 
                 window_id = teams_window.handle
                 
-                # Check if this meeting already exists in database
-                existing_meeting_id = db.find_meeting_by_window(window_id, meeting_display_name)
+                # Check if the last meeting in DB has the same window_id
+                last_meeting_id, last_window_id, existing_window_title = db.find_last_meeting()
                 
-                if existing_meeting_id:
-                    current_meeting_id = existing_meeting_id
+                if last_meeting_id and last_window_id == window_id:
+                    current_meeting_id = last_meeting_id
                     print(f"[CAPTURE] Reconnected to existing meeting (ID: {current_meeting_id})")
+                    
+                    # Update window_title and meeting_name if they were empty or need updating
+                    if not existing_window_title or existing_window_title.strip() == '':
+                        db.update_meeting_info(current_meeting_id, meeting_display_name, window_title)
+                        print(f"[CAPTURE] Updated meeting info: {meeting_display_name}")
                 else:
                     current_meeting_id = db.create_meeting(meeting_display_name, window_title, window_id)
                     print(f"[CAPTURE] Started new meeting (ID: {current_meeting_id})")
@@ -604,11 +731,33 @@ def main():
                     export_thread.start()
             
             # Extract current captions
-            current_captions = extract_captions(live_captions)
+            try:
+                current_captions = extract_captions(live_captions)
+                # If extraction returned empty and we're using cached element, force refresh
+                if not current_captions and cached_live_captions:
+                    timestamp = datetime.now().strftime('%H:%M:%S')
+                    if iteration % 4 == 0:  # Every ~1 second (4 iterations * 250ms)
+                        print(f"[{timestamp}] [CAPTURE] [DEBUG] No captions extracted, forcing refresh")
+                        # Force refresh on next iteration
+                        cached_live_captions = None
+            except Exception as e:
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                print(f"[{timestamp}] [CAPTURE] [ERROR] Failed to extract captions: {e}")
+                import traceback
+                traceback.print_exc()
+                # Clear cache and retry
+                cached_live_captions = None
+                time.sleep(1)
+                continue
             
             # Process and store captions
             new_or_changed = 0
             last_stats_log = getattr(main, 'last_stats_log', 0)
+            
+            if not current_captions:
+                timestamp = datetime.now().strftime('%H:%M:%S')
+                if iteration % 20 == 0:  # Log occasionally when no captions
+                    print(f"[{timestamp}] [CAPTURE] [DEBUG] No captions extracted from UI")
             
             for runtime_id, caption_data in current_captions.items():
                 speaker = caption_data['speaker']
@@ -642,8 +791,8 @@ def main():
                 
                 main.last_stats_log = current_time
             
-            # Wait 500ms
-            time.sleep(0.5)
+            # Wait 250ms
+            time.sleep(0.25)
             
     except KeyboardInterrupt:
         print("[CAPTURE] Stopping caption monitor...")

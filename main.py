@@ -7,6 +7,7 @@ import argparse
 import os
 import threading
 import time
+import tracemalloc
 
 # Import the main functions from each module
 from api import run_api
@@ -22,6 +23,10 @@ def main():
     
     args = parser.parse_args()
     
+    # Start tracemalloc for memory profiling
+    tracemalloc.start()
+    print("[MAIN] tracemalloc memory tracing enabled")
+
     # Validate arguments
     if args.api_only and args.capture_only:
         print("Error: Cannot use both --api-only and --capture-only")

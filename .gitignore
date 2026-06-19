@@ -43,3 +43,6 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+transcripts.db
+transcripts.db-shm
+transcripts.db-wal

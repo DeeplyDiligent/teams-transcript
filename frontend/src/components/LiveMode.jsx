@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 
-export default function LiveMode({ meetingId, onBack }) {
+export default function LiveMode({ meetingId, onBack, onBackToList }) {
   const [captions, setCaptions] = useState([])
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
@@ -406,35 +406,51 @@ export default function LiveMode({ meetingId, onBack }) {
   return (
     <div className="h-full flex flex-col bg-white rounded-lg shadow-md overflow-hidden">
       {/* Header */}
-      <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <div className="p-2 sm:p-4 bg-gradient-to-r from-green-50 to-emerald-50 flex-shrink-0">
+        {/* Mobile back to meetings button */}
+        {onBackToList && (
+          <div className="lg:hidden mb-2">
             <button
-              onClick={onBack}
-              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors cursor-pointer"
-              title="Back to transcript"
+              onClick={onBackToList}
+              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
+              <span className="text-sm font-medium">Back to Meetings</span>
             </button>
-            <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">Live Mode</h2>
-              <p className="text-sm text-gray-600">{connected ? 'Connected' : 'Disconnected'}</p>
+          </div>
+        )}
+        
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            {/* Desktop back to transcript button */}
+            <button
+              onClick={onBack}
+              className="hidden lg:flex items-center gap-1 sm:gap-2 text-gray-700 hover:text-gray-900 transition-colors cursor-pointer flex-shrink-0"
+              title="Back to transcript"
+            >
+              <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className={`w-2.5 sm:w-3 h-2.5 sm:h-3 rounded-full flex-shrink-0 ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">Live Mode</h2>
+              <p className="text-xs sm:text-sm text-gray-600">{connected ? 'Connected' : 'Disconnected'}</p>
             </div>
           </div>
           
           {/* Auto-send toggle */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={autoSend}
                 onChange={(e) => setAutoSend(e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
               />
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-xs sm:text-sm font-medium text-gray-700">
                 Auto Send
               </span>
             </label>
@@ -442,11 +458,11 @@ export default function LiveMode({ meetingId, onBack }) {
               <div className="flex items-center gap-2">
                 {nextSendCountdown !== null ? (
                   <span className="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                    Next in: {nextSendCountdown}s
+                    {nextSendCountdown}s
                   </span>
                 ) : null}
                 {lastSentTime && (
-                  <span className="text-xs text-gray-500">Last: {lastSentTime}</span>
+                  <span className="text-xs text-gray-500 hidden sm:inline">Last: {lastSentTime}</span>
                 )}
               </div>
             )}
@@ -455,47 +471,56 @@ export default function LiveMode({ meetingId, onBack }) {
       </div>
 
       {/* Split view container */}
-      <div className="flex-1 flex min-h-0">
-        {/* Transcript Panel - 50% or minimized */}
-        <div className={`flex flex-col transition-all duration-300 ${isTranscriptMinimized ? 'w-12' : 'w-1/2'}`}>
-          <div className="p-3 bg-gray-50 flex-shrink-0 flex items-center justify-between">
-            <div className={isTranscriptMinimized ? 'hidden' : ''}>
-              <h3 className="font-semibold text-gray-900">Live Transcript</h3>
-              <p className="text-xs text-gray-500 mt-1">{captions.length} captions</p>
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+        {/* Transcript Panel - 50% or minimized on desktop, full-width collapsible on mobile */}
+        <div className={`flex flex-col transition-all duration-300 ${
+          isTranscriptMinimized 
+            ? 'md:w-12 h-12 md:h-auto' 
+            : 'md:w-1/2 h-1/2 md:h-auto'
+        }`}>
+          <div className="p-2 sm:p-3 bg-gray-50 flex-shrink-0 flex items-center justify-between border-b md:border-r border-gray-200">
+            <div className={isTranscriptMinimized ? 'hidden' : 'flex-1 min-w-0'}>
+              <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Live Transcript</h3>
+              <p className="text-xs text-gray-500 mt-0.5 sm:mt-1">{captions.length} captions</p>
             </div>
             <button
               onClick={() => setIsTranscriptMinimized(!isTranscriptMinimized)}
-              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
               title={isTranscriptMinimized ? 'Expand transcript' : 'Minimize transcript'}
             >
-              <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 sm:w-5 h-4 sm:h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 {isTranscriptMinimized ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" className="md:hidden" />
                 ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" className="md:hidden" />
+                )}
+                {isTranscriptMinimized ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" className="hidden md:block" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" className="hidden md:block" />
                 )}
               </svg>
             </button>
           </div>
           
-          <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${isTranscriptMinimized ? 'hidden' : ''}`}>
+          <div className={`flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 sm:space-y-3 ${isTranscriptMinimized ? 'hidden' : ''}`}>
             {captions.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                <p>No captions yet. Waiting for the meeting to start...</p>
+              <div className="text-center text-gray-500 py-4 sm:py-8">
+                <p className="text-sm">No captions yet. Waiting for the meeting to start...</p>
               </div>
             ) : (
               [...groupedCaptions].reverse().map((group) => (
-                <div key={group.caption_ids.join('-')} className="flex gap-3">
-                  <div className="flex-shrink-0 text-xs text-gray-400 w-16 pt-1">
+                <div key={group.caption_ids.join('-')} className="flex gap-2 sm:gap-3">
+                  <div className="flex-shrink-0 text-xs text-gray-400 w-12 sm:w-16 pt-1">
                     {formatTime(group.timestamp)}
                   </div>
-                  <div className="flex-1">
-                    <div className={`inline-block px-2 py-0.5 rounded text-xs font-medium mb-1 ${getSpeakerColor(group.speaker)}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className={`inline-block px-1.5 sm:px-2 py-0.5 rounded text-xs font-medium mb-1 ${getSpeakerColor(group.speaker)}`}>
                       {group.speaker}
                     </div>
                     <div className="space-y-1">
                       {[...group.texts].reverse().map((text, idx) => (
-                        <p key={idx} className="text-gray-800">{text}</p>
+                        <p key={idx} className="text-gray-800 text-sm">{text}</p>
                       ))}
                     </div>
                   </div>
@@ -505,46 +530,50 @@ export default function LiveMode({ meetingId, onBack }) {
           </div>
         </div>
 
-        {/* AI Response Panel - 50% or expanded */}
-        <div className={`flex flex-col bg-gray-50 transition-all duration-300 ${isTranscriptMinimized ? 'flex-1' : 'w-1/2'}`}>
-          <div className="p-3 flex-shrink-0 flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900">AI Assistant</h3>
-              <p className="text-xs text-gray-500 mt-1">Ask questions about the conversation (recent context)</p>
+        {/* AI Response Panel - 50% or expanded on desktop, bottom half on mobile */}
+        <div className={`flex flex-col bg-gray-50 transition-all duration-300 ${
+          isTranscriptMinimized 
+            ? 'flex-1' 
+            : 'md:w-1/2 h-1/2 md:h-auto'
+        }`}>
+          <div className="p-2 sm:p-3 flex-shrink-0 flex items-center justify-between border-b border-gray-200">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900 text-sm sm:text-base">AI Assistant</h3>
+              <p className="text-xs text-gray-500 mt-0.5 sm:mt-1 truncate">Ask questions about the conversation</p>
             </div>
             <button
               onClick={() => handleGenerate(false)}
               disabled={isGenerating}
-              className="p-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+              className="p-1.5 sm:p-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex-shrink-0 ml-2"
               title="What should I say next?"
             >
               {isGenerating ? (
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <svg className="animate-spin h-4 sm:h-5 w-4 sm:w-5" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               ) : (
-                <span className="text-xl">🪄</span>
+                <span className="text-lg sm:text-xl">🪄</span>
               )}
             </button>
           </div>
           
           {/* AI Response */}
-          <div className="flex-1 overflow-y-auto p-4 bg-white">
+          <div className="flex-1 overflow-y-auto p-2 sm:p-4 bg-white">
             {(isGenerating && previousResponse) ? (
-              <article className="prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-code:text-pink-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+              <article className="prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-code:text-pink-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs sm:prose-code:text-sm prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:text-xs sm:prose-pre:text-sm prose-pre:overflow-x-auto">
                 <ReactMarkdown>{previousResponse}</ReactMarkdown>
               </article>
             ) : aiResponse ? (
-              <article className="prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-code:text-pink-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+              <article className="prose prose-sm max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-code:text-pink-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs sm:prose-code:text-sm prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:text-xs sm:prose-pre:text-sm prose-pre:overflow-x-auto">
                 <ReactMarkdown>{aiResponse}</ReactMarkdown>
               </article>
             ) : (
-              <div className="text-center text-gray-500 py-8">
-                <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="text-center text-gray-500 py-4 sm:py-8">
+                <svg className="mx-auto h-10 sm:h-12 w-10 sm:w-12 text-gray-400 mb-2 sm:mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-5 5v-5z" />
                 </svg>
-                <p>Click the magic wand to get AI insights</p>
+                <p className="text-sm">Click the magic wand to get AI insights</p>
                 <p className="text-xs mt-2">Auto-send analyzes recent conversation context</p>
               </div>
             )}

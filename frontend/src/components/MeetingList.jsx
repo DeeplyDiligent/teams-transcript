@@ -5,6 +5,7 @@ export default function MeetingList({ selectedMeeting, onSelectMeeting }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(20)
   const [editingMeetingId, setEditingMeetingId] = useState(null)
   const [editingName, setEditingName] = useState('')
 
@@ -83,8 +84,23 @@ export default function MeetingList({ selectedMeeting, onSelectMeeting }) {
   const filteredMeetings = meetings.filter(meeting => {
     if (!searchQuery.trim()) return true
     const searchLower = searchQuery.toLowerCase()
-    return (meeting.meeting_name || 'Untitled Meeting').toLowerCase().includes(searchLower)
+    
+    // Search by meeting name
+    const nameMatch = (meeting.meeting_name || 'Untitled Meeting').toLowerCase().includes(searchLower)
+    
+    // Search by speaker names
+    const speakerMatch = meeting.speakers && meeting.speakers.some(speaker => 
+      speaker.toLowerCase().includes(searchLower)
+    )
+    
+    return nameMatch || speakerMatch
   })
+
+  // If selected meeting isn't in the visible slice, expand to include it
+  const selectedIndex = filteredMeetings.findIndex(m => m.meeting_id === selectedMeeting)
+  const effectiveVisibleCount = selectedIndex >= visibleCount ? selectedIndex + 1 : visibleCount
+  const visibleMeetings = filteredMeetings.slice(0, effectiveVisibleCount)
+  const hasMore = filteredMeetings.length > effectiveVisibleCount
 
   if (loading) {
     return (
@@ -139,9 +155,9 @@ export default function MeetingList({ selectedMeeting, onSelectMeeting }) {
         <div className="relative">
           <input
             type="text"
-            placeholder="Search meetings..."
+            placeholder="Search meetings or speakers..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(20) }}
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -156,7 +172,8 @@ export default function MeetingList({ selectedMeeting, onSelectMeeting }) {
             {searchQuery ? 'No meetings found matching your search' : 'No meetings found'}
           </div>
         ) : (
-          filteredMeetings.map((meeting) => (
+          <>
+          {visibleMeetings.map((meeting) => (
             <button
               key={meeting.meeting_id}
               onClick={() => onSelectMeeting(meeting.meeting_id)}
@@ -225,9 +242,32 @@ export default function MeetingList({ selectedMeeting, onSelectMeeting }) {
                   </svg>
                   {meeting.caption_count} captions
                 </span>
+                {meeting.speakers && meeting.speakers.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                    {meeting.speakers.length} participants
+                  </span>
+                )}
               </div>
+              {meeting.speakers && meeting.speakers.length > 0 && (
+                <div className="mt-2 text-xs text-gray-500 truncate">
+                  {meeting.speakers.join(', ')}
+                </div>
+              )}
             </button>
           ))
+          }
+          {hasMore && (
+            <button
+              onClick={() => setVisibleCount(prev => prev + 20)}
+              className="w-full py-3 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors"
+            >
+              Load more ({filteredMeetings.length - effectiveVisibleCount} remaining)
+            </button>
+          )}
+          </>
         )}
       </div>
     </div>

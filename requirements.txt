@@ -1,6 +1,7 @@
 flask
 flask-cors
 requests
+psutil
 
 # AI Chat - Choose one backend:
 # 1. GitHub Copilot SDK (requires GitHub Copilot subscription)

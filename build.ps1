@@ -1,6 +1,6 @@
-# Build and Run Teams Transcript Viewer (Production Mode)
+# Build Teams Transcript Viewer Frontend
 
-Write-Host "Building Teams Transcript Viewer (PRODUCTION MODE)..." -ForegroundColor Green
+Write-Host "Building Teams Transcript Viewer..." -ForegroundColor Green
 Write-Host ""
 
 # Build the frontend
@@ -24,29 +24,4 @@ if (-not (Test-Path "frontend\dist\index.html")) {
     exit 1
 }
 
-Write-Host "Starting production server..." -ForegroundColor Yellow
-Write-Host ""
-
-# Start main.py (serves both API and static frontend)
-$mainProcess = Start-Process -FilePath ".\venv\Scripts\python.exe" -ArgumentList "main.py" -PassThru
-
-Write-Host "Production server is running!" -ForegroundColor Green
-Write-Host "- Application: http://localhost:5000" -ForegroundColor Cyan
-Write-Host "- API: http://localhost:5000/api" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Press any key to stop the server..." -ForegroundColor Red
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-
-# Stop the process
-Write-Host ""
-Write-Host "Stopping server..." -ForegroundColor Yellow
-Stop-Process -Id $mainProcess.Id -Force -ErrorAction SilentlyContinue
-
-# Also kill any child processes
-Get-Process | Where-Object { $_.ProcessName -eq "python" } | ForEach-Object {
-    try {
-        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-    } catch {}
-}
-
-Write-Host "Server stopped." -ForegroundColor Green
+Write-Host "Build complete! Run .\run-built-app.ps1 to start the production server." -ForegroundColor Cyan

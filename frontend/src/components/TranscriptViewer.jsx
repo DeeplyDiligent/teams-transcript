@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import ChatResponse from './ChatResponse'
 
-export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
+export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToList }) {
   const [meeting, setMeeting] = useState(null)
   const [captions, setCaptions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -14,10 +14,23 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
   const [editingName, setEditingName] = useState('')
   const eventSourceRef = useRef(null)
   const chatEndRef = useRef(null)
+  const chatContainerRef = useRef(null)
+  const shouldAutoScrollRef = useRef(true)
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages change, but only if user is at bottom
   useEffect(() => {
-    if (chatEndRef.current) {
+    // Check if user is at/near the bottom before message update
+    if (chatContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+      // If within 100px of bottom, consider user is at bottom
+      shouldAutoScrollRef.current = distanceFromBottom < 100
+    }
+  }, [chatMessages])
+
+  useEffect(() => {
+    // Only scroll if user was at bottom
+    if (chatEndRef.current && shouldAutoScrollRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [chatMessages])
@@ -399,7 +412,22 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
   return (
     <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden h-full flex flex-col">
       {/* Meeting Info Card */}
-      <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-b border-gray-200 flex-shrink-0">
+      <div className="p-3 sm:p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-b border-gray-200 flex-shrink-0">
+        {/* Mobile back button */}
+        {onBackToList && (
+          <div className="lg:hidden mb-3">
+            <button
+              onClick={onBackToList}
+              className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span className="text-sm font-medium">Back to Meetings</span>
+            </button>
+          </div>
+        )}
+        
         {isEditingName ? (
           <div className="flex items-center gap-2 mb-3">
             <input
@@ -411,66 +439,66 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
                 if (e.key === 'Escape') handleCancelEdit()
               }}
               style={{ textOverflow: 'clip' }}
-              className="flex-1 min-w-0 px-3 py-2 text-xl font-bold border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-x-auto"
+              className="flex-1 min-w-0 px-2 sm:px-3 py-1.5 sm:py-2 text-lg sm:text-xl font-bold border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-x-auto"
               autoFocus
             />
             <button
               onClick={handleSaveEdit}
-              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+              className="p-1.5 sm:p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors flex-shrink-0"
               title="Save"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 sm:w-6 h-5 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </button>
             <button
               onClick={handleCancelEdit}
-              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-1.5 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
               title="Cancel"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 sm:w-6 h-5 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
         ) : (
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate flex-1 min-w-0 pr-2">
               {meeting.meeting_name || 'Untitled Meeting'}
             </h2>
             <button
               onClick={handleEditClick}
-              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
               title="Edit meeting name"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
             </button>
           </div>
         )}
         
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+        <div className="hidden lg:grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+            <svg className="w-3.5 sm:w-4 h-3.5 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
             </svg>
-            <span>{formatDate(meeting.start_time)} • {formatTime(meeting.start_time)}</span>
+            <span className="truncate">{formatDate(meeting.start_time)} • {formatTime(meeting.start_time)}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+            <svg className="w-3.5 sm:w-4 h-3.5 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h6v4H7V5zm6 6H7v2h6v-2z" clipRule="evenodd" />
             </svg>
-            <span>Meeting ID: {meetingId}</span>
+            <span className="truncate">Meeting ID: {meetingId}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+            <svg className="w-3.5 sm:w-4 h-3.5 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
             </svg>
             <span>{getParticipants().length} participants</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+            <svg className="w-3.5 sm:w-4 h-3.5 sm:h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
               <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
             </svg>
@@ -478,21 +506,22 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
           </div>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <button
             onClick={() => setShowTranscript(true)}
-            className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 sm:px-4 py-2 sm:py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            View Full Transcript
+            <span className="hidden sm:inline">View Full Transcript</span>
+            <span className="sm:hidden">Transcript</span>
           </button>
           <button
             onClick={onShowLiveMode}
-            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-3 sm:px-4 py-2 sm:py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base"
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
             </svg>
             Live Mode
@@ -501,34 +530,34 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
       </div>
 
       {/* Chat Interface */}
-      <div className="flex-1 overflow-y-auto p-6 bg-gray-50 min-h-0">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-3 sm:p-6 bg-gray-50 min-h-0">
         {chatMessages.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="inline-block p-4 bg-white rounded-full shadow-md mb-4">
-              <svg className="w-12 h-12 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="text-center py-8 sm:py-12">
+            <div className="inline-block p-3 sm:p-4 bg-white rounded-full shadow-md mb-3 sm:mb-4">
+              <svg className="w-10 sm:w-12 h-10 sm:h-12 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Chat about this meeting</h3>
-            <p className="text-sm text-gray-600 mb-4">Ask questions about the transcript or request insights</p>
-            <div className="max-w-md mx-auto text-left bg-white rounded-lg shadow-sm p-4 space-y-2">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Chat about this meeting</h3>
+            <p className="text-xs sm:text-sm text-gray-600 mb-4 px-4">Ask questions about the transcript or request insights</p>
+            <div className="max-w-md mx-auto text-left bg-white rounded-lg shadow-sm p-3 sm:p-4 space-y-2">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Try asking:</p>
               <div className="space-y-2">
                 <button
                   onClick={() => setChatInput("What were the main topics discussed?")}
-                  className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-md transition-colors"
+                  className="block w-full text-left px-2 sm:px-3 py-2 text-xs sm:text-sm text-gray-700 hover:bg-blue-50 rounded-md transition-colors"
                 >
                   💭 What were the main topics discussed?
                 </button>
                 <button
                   onClick={() => setChatInput("Summarize the key decisions")}
-                  className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-md transition-colors"
+                  className="block w-full text-left px-2 sm:px-3 py-2 text-xs sm:text-sm text-gray-700 hover:bg-blue-50 rounded-md transition-colors"
                 >
                   📋 Summarize the key decisions
                 </button>
                 <button
                   onClick={() => setChatInput("What action items were mentioned?")}
-                  className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 rounded-md transition-colors"
+                  className="block w-full text-left px-2 sm:px-3 py-2 text-xs sm:text-sm text-gray-700 hover:bg-blue-50 rounded-md transition-colors"
                 >
                   ✅ What action items were mentioned?
                 </button>
@@ -536,14 +565,14 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
             </div>
           </div>
         ) : (
-          <div className="space-y-4 max-w-3xl mx-auto">
+          <div className="space-y-3 sm:space-y-4 max-w-3xl mx-auto">
             {chatMessages.map(message => (
               <div
                 key={message.id}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                  className={`max-w-[85%] sm:max-w-[80%] rounded-lg px-3 sm:px-4 py-2 sm:py-3 ${
                     message.role === 'user'
                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
                       : 'bg-white text-gray-900 shadow-sm border border-gray-200'
@@ -594,16 +623,16 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
       </div>
 
       {/* Chat Input */}
-      <div className="p-4 bg-white border-t border-gray-200 flex-shrink-0">
-        <form onSubmit={handleSendMessage} className="flex gap-3">
+      <div className="p-2 sm:p-4 bg-white border-t border-gray-200 flex-shrink-0">
+        <form onSubmit={handleSendMessage} className="flex gap-2 sm:gap-3">
           <button
             type="button"
             onClick={clearChatHistory}
             disabled={chatMessages.length === 0}
-            className="px-4 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-red-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-gray-600 hover:text-red-600"
+            className="px-2 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-red-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 sm:gap-2 text-gray-600 hover:text-red-600 flex-shrink-0"
             title="Clear chat history"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
@@ -611,16 +640,16 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
             type="text"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
-            placeholder="Ask about this meeting transcript..."
-            className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            placeholder="Ask about this meeting..."
+            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm sm:text-base"
           />
           <button
             type="submit"
             disabled={!chatInput.trim()}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 sm:gap-2 flex-shrink-0"
           >
-            <span>Send</span>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <span className="hidden sm:inline">Send</span>
+            <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </button>
@@ -634,6 +663,7 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode }) {
 function TranscriptView({ meeting, captions, connected, onClose }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [, setUpdateTrigger] = useState(0)
+  const [copySuccess, setCopySuccess] = useState(false)
 
   // Update every 5 seconds to refresh live status
   useEffect(() => {
@@ -657,6 +687,13 @@ function TranscriptView({ meeting, captions, connected, onClose }) {
     caption.speaker.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  // Get unique participants
+  const getParticipants = () => {
+    const speakersSet = new Set()
+    captions.forEach(caption => speakersSet.add(caption.speaker))
+    return Array.from(speakersSet).sort()
+  }
+
   // Check if meeting is actually live (last caption within 1 minute)
   const isLive = () => {
     if (!connected || captions.length === 0) return false
@@ -665,6 +702,40 @@ function TranscriptView({ meeting, captions, connected, onClose }) {
     const now = Date.now()
     const oneMinute = 60 * 1000
     return (now - lastCaptionTime) < oneMinute
+  }
+
+  // Copy transcript to clipboard
+  const handleCopyTranscript = async () => {
+    // Group captions in chronological order (oldest first) for copy
+    const chronologicalGroups = filteredCaptions.reduce((acc, caption) => {
+      const lastGroup = acc[acc.length - 1]
+      
+      if (lastGroup && lastGroup.speaker === caption.speaker) {
+        lastGroup.texts.push(caption.text)
+      } else {
+        acc.push({
+          speaker: caption.speaker,
+          texts: [caption.text]
+        })
+      }
+      
+      return acc
+    }, [])
+
+    // Format the transcript
+    const formattedTranscript = chronologicalGroups.map(group => {
+      const texts = group.texts.join('\n')
+      return `${group.speaker}: ${texts}`
+    }).join('\n\n')
+
+    try {
+      await navigator.clipboard.writeText(formattedTranscript)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy transcript:', err)
+      alert('Failed to copy to clipboard')
+    }
   }
 
   // Group consecutive captions from the same speaker (in reverse order - newest first)
@@ -704,61 +775,111 @@ function TranscriptView({ meeting, captions, connected, onClose }) {
   return (
     <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden h-full flex flex-col">
       {/* Header */}
-      <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+      <div className="px-3 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}
-          className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors cursor-pointer pr-4"
+          className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors cursor-pointer pr-2 sm:pr-4 flex-shrink-0"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h2 className="text-xl font-bold text-gray-900">
+        <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate flex-1 min-w-0 text-center px-2">
           {meeting.meeting_name || 'Untitled Meeting'}
         </h2>
         {isLive() && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
             <span className="text-xs text-gray-600 font-medium">Live</span>
           </div>
         )}
-        {!isLive() && <div></div>}
+        {!isLive() && <div className="w-10 sm:w-16"></div>}
       </div>
 
       {/* Search */}
-      <div className="p-4 bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search transcript..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-3 pl-11 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-          />
-          <svg 
-            className="absolute left-3.5 top-3.5 h-5 w-5 text-gray-400" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
+      <div className="p-2 sm:p-4 bg-white border-b border-gray-200 flex-shrink-0">
+        <div className="flex gap-2 sm:gap-3">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="Search transcript..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 pl-9 sm:pl-11 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm sm:text-base"
+            />
+            <svg 
+              className="absolute left-2.5 sm:left-3.5 top-2.5 sm:top-3.5 h-4 sm:h-5 w-4 sm:w-5 text-gray-400" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <button
+            onClick={handleCopyTranscript}
+            disabled={filteredCaptions.length === 0}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg font-medium transition-all flex-shrink-0 text-sm sm:text-base ${
+              copySuccess 
+                ? 'bg-green-600 text-white' 
+                : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed'
+            }`}
+            title="Copy transcript to clipboard"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+            {copySuccess ? (
+              <>
+                <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="hidden sm:inline">Copied!</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span className="hidden sm:inline">Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Participants */}
+      <div className="px-2 sm:px-4 py-2 sm:py-3 bg-gradient-to-r from-gray-50 to-blue-50 border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 text-gray-700 font-medium text-xs sm:text-sm flex-shrink-0">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+            </svg>
+            <span className="font-semibold">Participants ({getParticipants().length}):</span>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            {getParticipants().map(speaker => (
+              <span 
+                key={speaker} 
+                className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-semibold border ${getSpeakerColor(speaker).bg} ${getSpeakerColor(speaker).text} ${getSpeakerColor(speaker).border}`}
+              >
+                {speaker}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Transcript */}
-      <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+      <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-gray-50">
         {groupedCaptions.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">
+          <div className="text-center text-gray-500 py-8 text-sm sm:text-base">
             {searchTerm ? 'No matching captions found' : 'No captions available'}
           </div>
         ) : (
-          <div className="space-y-4 max-w-4xl mx-auto">
+          <div className="space-y-3 sm:space-y-4 max-w-4xl mx-auto">
             {groupedCaptions.map((group, index) => (
-              <div key={group.caption_ids.join('-')} className="bg-white hover:bg-gray-50 p-4 rounded-lg transition-colors shadow-sm border border-gray-200">
-                <div className="pl-2 space-y-2 mb-3">
+              <div key={group.caption_ids.join('-')} className="bg-white hover:bg-gray-50 p-3 sm:p-4 rounded-lg transition-colors shadow-sm border border-gray-200">
+                <div className="pl-1 sm:pl-2 space-y-1.5 sm:space-y-2 mb-2 sm:mb-3">
                   {group.texts.map((text, textIndex) => (
-                    <p key={textIndex} className="text-gray-900 leading-relaxed">
+                    <p key={textIndex} className="text-gray-900 leading-relaxed text-sm sm:text-base">
                       {searchTerm ? (
                         <HighlightedText text={text} highlight={searchTerm} />
                       ) : (
@@ -767,11 +888,11 @@ function TranscriptView({ meeting, captions, connected, onClose }) {
                     </p>
                   ))}
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${getSpeakerColor(group.speaker).bg} ${getSpeakerColor(group.speaker).text} ${getSpeakerColor(group.speaker).border}`}>
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <span className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-semibold border ${getSpeakerColor(group.speaker).bg} ${getSpeakerColor(group.speaker).text} ${getSpeakerColor(group.speaker).border}`}>
                     {group.speaker}
                   </span>
-                  <span className="text-sm text-gray-600 font-mono font-medium">
+                  <span className="text-xs sm:text-sm text-gray-600 font-mono font-medium">
                     {formatTime(group.timestamp)}
                   </span>
                 </div>
@@ -782,7 +903,7 @@ function TranscriptView({ meeting, captions, connected, onClose }) {
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-3 bg-white border-t border-gray-200 text-xs text-gray-600 font-medium flex-shrink-0">
+      <div className="px-3 sm:px-6 py-2 sm:py-3 bg-white border-t border-gray-200 text-xs text-gray-600 font-medium flex-shrink-0">
         Showing {filteredCaptions.length} of {captions.length} captions
       </div>
     </div>

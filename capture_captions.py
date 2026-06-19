@@ -8,8 +8,14 @@ import time
 import os
 import sqlite3
 import threading
+import tracemalloc
 from datetime import datetime, timedelta
 from pywinauto import Desktop
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 # Configuration
 ENABLE_MARKDOWN_EXPORT = False  # Set to True to enable automatic markdown file exports
@@ -124,11 +130,35 @@ class TranscriptDatabase:
             except Exception as e:
                 print(f"[DB] Migration 2 failed (may be already applied): {e}")
         
-        # Future migrations go here:
-        # if current_version < 3:
-        #     cursor.execute('ALTER TABLE ...')
-        #     cursor.execute('INSERT INTO schema_version (version) VALUES (3)')
-        #     print("[DB] Migration 3: Description")
+        # Migration 3: Add action_items table
+        if current_version < 3:
+            try:
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS action_items (
+                        action_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        meeting_id INTEGER NOT NULL,
+                        parent_id INTEGER,
+                        title TEXT NOT NULL,
+                        checked INTEGER DEFAULT 0,
+                        sort_order INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (meeting_id) REFERENCES meetings(meeting_id),
+                        FOREIGN KEY (parent_id) REFERENCES action_items(action_id)
+                    )
+                ''')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_action_meeting ON action_items(meeting_id)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_action_parent ON action_items(parent_id)')
+                
+                # Add actions_status column to meetings: null=not processed, 'generating', 'done', 'no_actions'
+                cursor.execute("PRAGMA table_info(meetings)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if 'actions_status' not in columns:
+                    cursor.execute('ALTER TABLE meetings ADD COLUMN actions_status TEXT')
+                
+                cursor.execute('INSERT INTO schema_version (version) VALUES (3)')
+                print("[DB] Migration 3: Created action_items table and added actions_status to meetings")
+            except Exception as e:
+                print(f"[DB] Migration 3 failed (may be already applied): {e}")
     
     def find_last_meeting(self):
         """Get the last meeting in the database."""
@@ -437,6 +467,23 @@ def log_meeting_stats(db, meeting_id):
     print(f"[{timestamp}] [CAPTURE] Total: {stats['caption_count']} captions, {len(stats['participants'])} participants")
 
 
+def _log_memory_usage():
+    """Log current memory usage to console."""
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    parts = []
+    if psutil:
+        proc = psutil.Process(os.getpid())
+        rss = proc.memory_info().rss / 1024 / 1024
+        parts.append(f"RSS={rss:.1f}MB")
+        parts.append(f"threads={proc.num_threads()}")
+    if tracemalloc.is_tracing():
+        current, peak = tracemalloc.get_traced_memory()
+        parts.append(f"traced={current / 1024 / 1024:.1f}MB")
+        parts.append(f"peak={peak / 1024 / 1024:.1f}MB")
+    if parts:
+        print(f"[{timestamp}] [MEMORY] {', '.join(parts)}")
+
+
 def sanitize_filename(title):
     """Convert window title to a safe filename."""
     # Remove invalid filename characters
@@ -448,12 +495,18 @@ def sanitize_filename(title):
 
 
 def extract_meeting_name(window_title):
-    """Extract meeting name from window title (everything before first |)."""
+    """Extract meeting name from window title (everything before the 3rd last |)."""
     if not window_title:
         return 'Untitled Meeting'
-    # Split by | and take first part, then strip whitespace
     parts = window_title.split('|')
-    meeting_name = parts[0].strip()
+    if len(parts) > 3:
+        # Meeting name may contain |; strip the last 3 segments (app/context info)
+        meeting_name = '|'.join(parts[:-3]).strip()
+    elif len(parts) > 1:
+        # Fewer than 3 | separators, fall back to everything before the last |
+        meeting_name = parts[0].strip()
+    else:
+        meeting_name = window_title.strip()
     return meeting_name if meeting_name else 'Untitled Meeting'
 
 
@@ -788,6 +841,9 @@ def main():
                 if current_count != last_count:
                     log_meeting_stats(db, current_meeting_id)
                     main.last_caption_count = current_count
+                
+                # Log memory usage
+                _log_memory_usage()
                 
                 main.last_stats_log = current_time
             

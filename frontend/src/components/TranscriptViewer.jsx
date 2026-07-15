@@ -1,18 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import ChatResponse from './ChatResponse'
+import useCaptionStream from '../hooks/useCaptionStream'
 
 export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToList }) {
   const [meeting, setMeeting] = useState(null)
   const [captions, setCaptions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [connected, setConnected] = useState(false)
   const [showTranscript, setShowTranscript] = useState(false)
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
   const [isEditingName, setIsEditingName] = useState(false)
   const [editingName, setEditingName] = useState('')
-  const eventSourceRef = useRef(null)
   const chatEndRef = useRef(null)
   const chatContainerRef = useRef(null)
   const shouldAutoScrollRef = useRef(true)
@@ -47,14 +46,25 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToLi
     if (meetingId) {
       fetchMeetingData()
     }
-    
-    // Cleanup on unmount
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
-    }
   }, [meetingId])
+
+  const { connected } = useCaptionStream({
+    meetingId,
+    onInitial: (initialCaptions) => {
+      setCaptions(initialCaptions)
+      setLoading(false)
+      setError(null)
+    },
+    onCaption: (caption) => {
+      setCaptions((previous) => [...previous, caption])
+    },
+    onUpdate: (caption) => {
+      setCaptions((previous) => previous.map((item) => (
+        item.caption_id === caption.caption_id ? caption : item
+      )))
+    },
+    onServerError: setError,
+  })
 
   const loadChatHistory = async () => {
     try {
@@ -157,59 +167,6 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToLi
       
       setMeeting(meetingData)
       setError(null)
-      
-      // Close existing EventSource if any
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
-      
-      // Connect to SSE stream for captions
-      const eventSource = new EventSource(`/api/meetings/${meetingId}/captions`)
-      eventSourceRef.current = eventSource
-      
-      eventSource.onopen = () => {
-        setConnected(true)
-        setError(null)
-      }
-      
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          
-          if (data.type === 'initial') {
-            // Initial batch of captions
-            setCaptions(data.captions)
-            setLoading(false)
-          } else if (data.type === 'caption') {
-            // New caption received
-            setCaptions(prev => [...prev, data.caption])
-          } else if (data.type === 'update') {
-            // Existing caption updated
-            setCaptions(prev => prev.map(cap => 
-              cap.caption_id === data.caption.caption_id ? data.caption : cap
-            ))
-          } else if (data.type === 'error') {
-            setError(data.message)
-          }
-        } catch (err) {
-          console.error('Failed to parse SSE data:', err)
-        }
-      }
-      
-      eventSource.onerror = (err) => {
-        console.error('EventSource error:', err)
-        setConnected(false)
-        setError('Connection lost. Attempting to reconnect...')
-        
-        // EventSource will automatically attempt to reconnect
-        // If it fails completely, close and try again after delay
-        setTimeout(() => {
-          if (eventSource.readyState === EventSource.CLOSED) {
-            fetchMeetingData()
-          }
-        }, 5000)
-      }
-      
     } catch (err) {
       setError(err.message)
       setLoading(false)

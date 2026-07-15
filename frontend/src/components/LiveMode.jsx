@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
+import useCaptionStream from '../hooks/useCaptionStream'
 
 export default function LiveMode({ meetingId, onBack, onBackToList }) {
   const [captions, setCaptions] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [connected, setConnected] = useState(false)
   const [aiResponse, setAiResponse] = useState('')
   const [previousResponse, setPreviousResponse] = useState('') // Keep old response while generating
   const [isGenerating, setIsGenerating] = useState(false)
@@ -16,7 +15,6 @@ export default function LiveMode({ meetingId, onBack, onBackToList }) {
   // Fixed query for the assistant
   const query = "What should I say next?"
   
-  const eventSourceRef = useRef(null)
   const silenceTimerRef = useRef(null)
   const maxWaitTimerRef = useRef(null)
   const chatEventSourceRef = useRef(null)
@@ -28,16 +26,53 @@ export default function LiveMode({ meetingId, onBack, onBackToList }) {
   const isGeneratingRef = useRef(false)
   const resetAutoSendTimersRef = useRef(null)
 
-  // Connect to SSE for live captions
-  useEffect(() => {
-    if (meetingId) {
-      connectToMeeting()
-    }
-    
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
+  const { connected, loading } = useCaptionStream({
+    meetingId,
+    limit: 200,
+    onInitial: (initialCaptions) => {
+      setCaptions(initialCaptions)
+      if (initialCaptions.length > 0) {
+        lastCaptionContentRef.current = initialCaptions
+          .map((caption) => `${caption.caption_id}:${caption.text}`)
+          .join('|')
       }
+    },
+    onCaption: (caption) => {
+      setCaptions((previous) => {
+        const updated = [...previous, caption]
+        lastCaptionContentRef.current = updated
+          .map((item) => `${item.caption_id}:${item.text}`)
+          .join('|')
+        lastCaptionEventTimeRef.current = Date.now()
+        window.resetAutoSendTimers?.()
+        return updated
+      })
+    },
+    onUpdate: (caption) => {
+      setCaptions((previous) => {
+        const oldCaption = previous.find(
+          (item) => item.caption_id === caption.caption_id,
+        )
+        const updated = previous.map((item) => (
+          item.caption_id === caption.caption_id ? caption : item
+        ))
+        if (oldCaption && oldCaption.text !== caption.text) {
+          lastCaptionContentRef.current = updated
+            .map((item) => `${item.caption_id}:${item.text}`)
+            .join('|')
+          lastCaptionEventTimeRef.current = Date.now()
+          window.resetAutoSendTimers?.()
+        }
+        return updated
+      })
+    },
+    onServerError: (message) => {
+      console.error('Caption stream error:', message)
+    },
+  })
+
+  useEffect(() => {
+    return () => {
       if (chatEventSourceRef.current) {
         chatEventSourceRef.current.close()
       }
@@ -49,7 +84,7 @@ export default function LiveMode({ meetingId, onBack, onBackToList }) {
       }
       window.resetAutoSendTimers = null
     }
-  }, [meetingId])
+  }, [])
 
   const handleGenerate = useCallback(async (useLimit = false) => {
     if (!query.trim() || isGeneratingRef.current) return
@@ -267,85 +302,6 @@ export default function LiveMode({ meetingId, onBack, onBackToList }) {
       window.resetAutoSendTimers = null
     }
   }, [autoSend, query, handleGenerate])
-
-  const connectToMeeting = () => {
-    setLoading(true)
-    setConnected(false)
-    
-    // Close existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-    }
-    
-    // Limit to last 200 captions for LiveMode performance
-    const eventSource = new EventSource(`/api/meetings/${meetingId}/captions?limit=200`)
-    eventSourceRef.current = eventSource
-    
-    eventSource.onopen = () => {
-      setConnected(true)
-      setLoading(false)
-    }
-    
-    eventSource.onerror = (err) => {
-      console.error('EventSource error:', err)
-      setConnected(false)
-      setLoading(false)
-      eventSource.close()
-    }
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        
-        if (data.type === 'initial') {
-          setCaptions(data.captions)
-          // Set initial content reference if captions exist
-          if (data.captions.length > 0) {
-            // Create a content hash from all caption texts
-            const contentHash = data.captions.map(c => `${c.caption_id}:${c.text}`).join('|')
-            lastCaptionContentRef.current = contentHash
-          }
-        } else if (data.type === 'caption') {
-          setCaptions(prev => {
-            const updated = [...prev, data.caption]
-            // Update content hash with new caption
-            const contentHash = updated.map(c => `${c.caption_id}:${c.text}`).join('|')
-            lastCaptionContentRef.current = contentHash
-            lastCaptionEventTimeRef.current = Date.now()
-            // Reset auto-send timers on new caption
-            if (window.resetAutoSendTimers) {
-              window.resetAutoSendTimers()
-            }
-            return updated
-          })
-        } else if (data.type === 'update') {
-          setCaptions(prev => {
-            const updated = prev.map(cap => 
-              cap.caption_id === data.caption.caption_id ? data.caption : cap
-            )
-            // Check if text actually changed
-            const oldCaption = prev.find(c => c.caption_id === data.caption.caption_id)
-            if (oldCaption && oldCaption.text !== data.caption.text) {
-              // Text changed, update content hash
-              const contentHash = updated.map(c => `${c.caption_id}:${c.text}`).join('|')
-              lastCaptionContentRef.current = contentHash
-              lastCaptionEventTimeRef.current = Date.now()
-              console.log('Caption text updated, triggering new content detection')
-              // Reset auto-send timers on caption update
-              if (window.resetAutoSendTimers) {
-                window.resetAutoSendTimers()
-              }
-            }
-            return updated
-          })
-        } else if (data.type === 'error') {
-          console.error('Caption stream error:', data.message)
-        }
-      } catch (err) {
-        console.error('Error parsing message:', err)
-      }
-    }
-  }
 
   const getSpeakerColor = (speaker) => {
     const colors = [

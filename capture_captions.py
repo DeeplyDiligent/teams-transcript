@@ -11,6 +11,11 @@ import threading
 import tracemalloc
 from datetime import datetime, timedelta
 from pywinauto import Desktop
+from caption_stream import (
+    CHANGE_RETENTION_SECONDS,
+    ensure_change_tracking_schema,
+    notify_caption_changes,
+)
 
 try:
     import psutil
@@ -28,6 +33,7 @@ class TranscriptDatabase:
         self.db_path = db_path
         self.conn = None
         self.lock = threading.Lock()
+        self.last_change_cleanup = 0
         self.init_database()
     
     def init_database(self):
@@ -89,6 +95,7 @@ class TranscriptDatabase:
         
         # Run migrations
         self._run_migrations(cursor, current_version)
+        ensure_change_tracking_schema(self.conn)
         
         self.conn.commit()
         print(f"Database initialized: {self.db_path}")
@@ -211,10 +218,71 @@ class TranscriptDatabase:
                 INSERT INTO captions (meeting_id, runtime_id, speaker, text, timestamp)
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(meeting_id, runtime_id) 
-                DO UPDATE SET text=excluded.text, updated_at=CURRENT_TIMESTAMP
+                DO UPDATE SET
+                    speaker=excluded.speaker,
+                    text=excluded.text,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE captions.speaker IS NOT excluded.speaker
+                   OR captions.text IS NOT excluded.text
             ''', (meeting_id, runtime_id, speaker, text, timestamp))
             self.conn.commit()
-            return cursor.lastrowid
+            changed = cursor.rowcount > 0
+        if changed:
+            notify_caption_changes()
+        return cursor.lastrowid
+
+    def upsert_captions(self, meeting_id, captions):
+        """Persist a caption snapshot in one transaction, writing only changes."""
+        results = []
+        with self.lock:
+            cursor = self.conn.cursor()
+            for runtime_id, caption_data in captions.items():
+                cursor.execute('''
+                    INSERT OR IGNORE INTO captions
+                        (meeting_id, runtime_id, speaker, text, timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (
+                    meeting_id,
+                    runtime_id,
+                    caption_data['speaker'],
+                    caption_data['text'],
+                    caption_data['timestamp'],
+                ))
+                is_new = cursor.rowcount > 0
+                changed = is_new
+                if not is_new:
+                    cursor.execute('''
+                        UPDATE captions
+                        SET speaker = ?, text = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE meeting_id = ? AND runtime_id = ?
+                          AND (speaker IS NOT ? OR text IS NOT ?)
+                    ''', (
+                        caption_data['speaker'],
+                        caption_data['text'],
+                        meeting_id,
+                        runtime_id,
+                        caption_data['speaker'],
+                        caption_data['text'],
+                    ))
+                    changed = cursor.rowcount > 0
+                results.append((runtime_id, is_new, changed))
+
+            if any(changed for _, _, changed in results):
+                cursor.execute(
+                    'UPDATE meetings SET last_activity = ? WHERE meeting_id = ?',
+                    (datetime.now(), meeting_id),
+                )
+            if time.monotonic() - self.last_change_cleanup >= 3600:
+                cursor.execute(
+                    "DELETE FROM caption_changes WHERE changed_at < datetime('now', ?)",
+                    (f"-{CHANGE_RETENTION_SECONDS} seconds",),
+                )
+                self.last_change_cleanup = time.monotonic()
+            self.conn.commit()
+
+        if any(changed for _, _, changed in results):
+            notify_caption_changes()
+        return results
     
     def get_recent_captions(self, meeting_id, limit=50):
         """Get the most recent captions for display."""
@@ -812,23 +880,18 @@ def main():
                 if iteration % 20 == 0:  # Log occasionally when no captions
                     print(f"[{timestamp}] [CAPTURE] [DEBUG] No captions extracted from UI")
             
-            for runtime_id, caption_data in current_captions.items():
-                speaker = caption_data['speaker']
-                text = caption_data['text']
-                timestamp = caption_data['timestamp']
-                
-                # Check if caption exists
-                is_new = not db.caption_exists(current_meeting_id, runtime_id)
-                
-                if is_new:
-                    # New caption
-                    db.insert_or_update_caption(current_meeting_id, runtime_id, speaker, text, timestamp)
-                    db.update_meeting_activity(current_meeting_id)
-                    log_caption_update(current_meeting_id, speaker, text, is_new=True)
-                    new_or_changed += 1
-                else:
-                    # Existing caption - update if text changed
-                    db.insert_or_update_caption(current_meeting_id, runtime_id, speaker, text, timestamp)
+            write_results = db.upsert_captions(current_meeting_id, current_captions)
+            for runtime_id, is_new, changed in write_results:
+                if not changed:
+                    continue
+                caption_data = current_captions[runtime_id]
+                log_caption_update(
+                    current_meeting_id,
+                    caption_data['speaker'],
+                    caption_data['text'],
+                    is_new=is_new,
+                )
+                new_or_changed += 1
             
             # Log stats every 30 seconds if there are changes
             current_time = time.time()

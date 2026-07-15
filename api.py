@@ -13,6 +13,7 @@ from flask import Flask, jsonify, send_from_directory, Response, request
 from flask_cors import CORS
 import sqlite3
 from datetime import datetime, timedelta
+from caption_stream import get_caption_stream_service
 
 try:
     import psutil
@@ -30,14 +31,20 @@ AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT', '')
 AZURE_OPENAI_KEY = os.getenv('AZURE_OPENAI_KEY', '')
 
 
-def create_app(static_folder='frontend/dist'):
+def create_app(static_folder='frontend/dist', db_path=None, caption_stream_service=None):
     """Create and configure the Flask app."""
+    app_db_path = db_path or DB_PATH
     app = Flask(__name__, static_folder=static_folder)
     CORS(app)  # Enable CORS for React frontend
+    caption_streams = (
+        caption_stream_service
+        or get_caption_stream_service(app_db_path)
+    )
+    app.extensions['caption_streams'] = caption_streams
     
     def get_db_connection():
         """Create a database connection."""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(app_db_path)
         conn.row_factory = sqlite3.Row  # Return rows as dictionaries
         return conn
 
@@ -173,191 +180,60 @@ def create_app(static_folder='frontend/dist'):
         caption_limit = None
         if limit:
             try:
-                caption_limit = int(limit)
+                caption_limit = max(1, min(int(limit), 1000))
             except ValueError:
                 caption_limit = None
         
         def generate():
-            last_caption_id = 0
-            seen_captions = {}  # Track caption_id -> updated_at
-            
-            # Send initial batch of all captions (or limited)
-            try:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                
-                # Build query with optional limit
-                if caption_limit:
-                    # Get last N captions
-                    cursor.execute('''
-                        SELECT 
-                            caption_id,
-                            meeting_id,
-                            runtime_id,
-                            speaker,
-                            text,
-                            timestamp,
-                            created_at,
-                            updated_at
-                        FROM captions
-                        WHERE meeting_id = ?
-                        ORDER BY timestamp DESC
-                        LIMIT ?
-                    ''', (meeting_id, caption_limit))
-                    rows = cursor.fetchall()
-                    # Reverse to get chronological order
-                    rows = list(reversed(rows))
-                else:
-                    # Get all captions
-                    cursor.execute('''
-                        SELECT 
-                            caption_id,
-                            meeting_id,
-                            runtime_id,
-                            speaker,
-                            text,
-                            timestamp,
-                            created_at,
-                            updated_at
-                        FROM captions
-                        WHERE meeting_id = ?
-                        ORDER BY timestamp ASC
-                    ''', (meeting_id,))
-                
-                rows = cursor.fetchall()
-                conn.close()
-                
-                if rows:
-                    # Send all existing captions as initial data
-                    captions = []
-                    for row in rows:
-                        caption = {
-                            'caption_id': row['caption_id'],
-                            'meeting_id': row['meeting_id'],
-                            'runtime_id': row['runtime_id'],
-                            'speaker': row['speaker'],
-                            'text': row['text'],
-                            'timestamp': row['timestamp'],
-                            'created_at': row['created_at'],
-                            'updated_at': row['updated_at']
-                        }
-                        captions.append(caption)
-                        last_caption_id = max(last_caption_id, row['caption_id'])
-                        seen_captions[row['caption_id']] = row['updated_at']
-                    
-                    # Send initial batch
-                    yield f"data: {json.dumps({'type': 'initial', 'captions': captions})}\n\n"
-                else:
-                    # No captions yet, send empty initial
-                    yield f"data: {json.dumps({'type': 'initial', 'captions': []})}\n\n"
-                
-            except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-                return
-            
-            # Poll for new captions every 500ms
-            while True:
+            with caption_streams.stream(meeting_id):
                 try:
-                    time.sleep(0.5)
-                    
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    
-                    # Get new captions and updated captions
-                    # If we have a caption_limit, only check captions within the window
-                    if caption_limit:
-                        # Get captions from the last N, plus any new ones beyond that
-                        cursor.execute('''
-                            SELECT 
-                                caption_id,
-                                meeting_id,
-                                runtime_id,
-                                speaker,
-                                text,
-                                timestamp,
-                                created_at,
-                                updated_at
-                            FROM captions
-                            WHERE meeting_id = ?
-                            AND caption_id >= (
-                                SELECT COALESCE(MIN(caption_id), 0)
-                                FROM (
-                                    SELECT caption_id
-                                    FROM captions
-                                    WHERE meeting_id = ?
-                                    ORDER BY timestamp DESC
-                                    LIMIT ?
-                                )
-                            )
-                            ORDER BY caption_id ASC
-                        ''', (meeting_id, meeting_id, caption_limit))
-                    else:
-                        # No limit, get all captions
-                        cursor.execute('''
-                            SELECT 
-                                caption_id,
-                                meeting_id,
-                                runtime_id,
-                                speaker,
-                                text,
-                                timestamp,
-                                created_at,
-                                updated_at
-                            FROM captions
-                            WHERE meeting_id = ?
-                            ORDER BY caption_id ASC
-                        ''', (meeting_id,))
-                    
-                    rows = cursor.fetchall()
-                    conn.close()
-                    
-                    # Check for new and updated captions
-                    for row in rows:
-                        caption_id = row['caption_id']
-                        updated_at = row['updated_at']
-                        
-                        # New caption
-                        if caption_id > last_caption_id:
-                            caption = {
-                                'caption_id': row['caption_id'],
-                                'meeting_id': row['meeting_id'],
-                                'runtime_id': row['runtime_id'],
-                                'speaker': row['speaker'],
-                                'text': row['text'],
-                                'timestamp': row['timestamp'],
-                                'created_at': row['created_at'],
-                                'updated_at': row['updated_at']
-                            }
-                            last_caption_id = caption_id
-                            seen_captions[caption_id] = updated_at
-                            yield f"data: {json.dumps({'type': 'caption', 'caption': caption})}\n\n"
-                        
-                        # Updated caption (same ID but different updated_at)
-                        elif caption_id in seen_captions and seen_captions[caption_id] != updated_at:
-                            caption = {
-                                'caption_id': row['caption_id'],
-                                'meeting_id': row['meeting_id'],
-                                'runtime_id': row['runtime_id'],
-                                'speaker': row['speaker'],
-                                'text': row['text'],
-                                'timestamp': row['timestamp'],
-                                'created_at': row['created_at'],
-                                'updated_at': row['updated_at']
-                            }
-                            seen_captions[caption_id] = updated_at
-                            yield f"data: {json.dumps({'type': 'update', 'caption': caption})}\n\n"
-                    
-                    # Send keepalive ping every 30 seconds of no activity
-                    if not rows:
-                        yield f": keepalive\n\n"
-                    
-                except GeneratorExit:
-                    break
-                except Exception as e:
-                    yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-                    break
+                    captions, change_id = caption_streams.initial_snapshot(
+                        meeting_id,
+                        caption_limit,
+                    )
+                    yield "retry: 3000\n"
+                    yield f"data: {json.dumps({'type': 'initial', 'captions': captions})}\n\n"
+                except sqlite3.Error as exc:
+                    yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+                    return
+
+                deadline = time.monotonic() + caption_streams.max_stream_seconds
+                while time.monotonic() < deadline:
+                    try:
+                        changes, change_id = caption_streams.changes_since(
+                            meeting_id,
+                            change_id,
+                        )
+                        if changes:
+                            for change in changes:
+                                operation = change.pop('operation')
+                                change.pop('change_id')
+                                event_type = 'caption' if operation == 'insert' else 'update'
+                                yield f"data: {json.dumps({'type': event_type, 'caption': change})}\n\n"
+                            continue
+
+                        changed = caption_streams.wait_for_change(
+                            change_id,
+                            caption_streams.heartbeat_seconds,
+                        )
+                        if not changed:
+                            yield f": heartbeat {int(time.time())}\n\n"
+                    except GeneratorExit:
+                        return
+                    except sqlite3.Error as exc:
+                        yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+                        return
+
+                yield "event: reconnect\ndata: {}\n\n"
         
-        return Response(generate(), mimetype='text/event-stream')
+        return Response(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache, no-transform',
+                'X-Accel-Buffering': 'no',
+            },
+        )
 
     @app.route('/api/meetings/<int:meeting_id>/chat', methods=['POST'])
     def chat_with_meeting(meeting_id):
@@ -1133,7 +1009,7 @@ Please provide helpful and detailed answers based on the transcript above. Make 
             import threading
             thread = threading.Thread(
                 target=_generate_actions_for_meeting,
-                args=(DB_PATH, meeting_id),
+                args=(app_db_path, meeting_id),
                 daemon=True
             )
             thread.start()
@@ -1158,6 +1034,7 @@ Please provide helpful and detailed answers based on the transcript above. Make 
                     'num_threads': proc.num_threads(),
                     'open_files': len(proc.open_files()),
                 }
+                result['caption_streams'] = caption_streams.diagnostics()
                 # System-wide memory
                 vm = psutil.virtual_memory()
                 result['system'] = {
@@ -1190,8 +1067,8 @@ Please provide helpful and detailed answers based on the transcript above. Make 
                 result['tracemalloc'] = {'enabled': False, 'hint': 'Start app via main.py to enable tracemalloc'}
 
             # DB file size
-            if os.path.exists(DB_PATH):
-                db_size = os.path.getsize(DB_PATH)
+            if os.path.exists(app_db_path):
+                db_size = os.path.getsize(app_db_path)
                 result['database'] = {
                     'file_mb': round(db_size / 1024 / 1024, 2),
                 }

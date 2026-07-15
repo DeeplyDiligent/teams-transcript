@@ -14,9 +14,24 @@ A web application for viewing and searching Microsoft Teams meeting transcripts 
 
 ## Architecture
 
-- **Backend**: Flask REST API serving data from SQLite database
-- **Frontend**: React + Vite + Tailwind CSS
-- **Database**: SQLite with meetings and captions tables
+- **Capture**: A single Teams UI Automation worker reads captions and persists
+  each snapshot in one SQLite transaction. Unchanged captions are not rewritten.
+- **Database**: SQLite in WAL mode is the source of truth. Insert/update triggers
+  append lightweight records to a durable `caption_changes` journal.
+- **Streaming**: One shared backend watcher monitors the journal and wakes all
+  subscribers. Browser connections receive incremental changes rather than
+  running their own database polling loops.
+- **Connection lifecycle**: Caption streams send heartbeats every 15 seconds and
+  expire after five minutes so disconnected clients are detected and resources
+  remain bounded. Native `EventSource` reconnection creates the replacement.
+- **Backend**: Flask provides REST APIs, bounded SSE streams, AI chat, and static
+  frontend hosting.
+- **Frontend**: React + Vite + Tailwind CSS uses one owned caption subscription
+  per mounted view.
+
+This architecture keeps database polling constant as browser count increases.
+For multi-host deployment, the `caption_changes` journal can be replaced by an
+external event broker without changing the frontend stream contract.
 
 ## Setup
 

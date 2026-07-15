@@ -1,5 +1,4 @@
 import json
-import io
 import sqlite3
 import tempfile
 import time
@@ -10,12 +9,7 @@ from pathlib import Path
 
 from api import create_app
 from caption_stream import CaptionStreamService
-from capture_captions import CaptionConsoleRenderer, TranscriptDatabase
-
-
-class InteractiveBuffer(io.StringIO):
-    def isatty(self):
-        return True
+from capture_captions import TranscriptDatabase
 
 
 class CaptionStreamTests(unittest.TestCase):
@@ -56,34 +50,6 @@ class CaptionStreamTests(unittest.TestCase):
         self.assertEqual(unchanged, [("runtime-1", False, False)])
         self.assertEqual(updated, [("runtime-1", False, True)])
         self.assertEqual(changes, [("insert",), ("update",)])
-
-    def test_caption_updates_rewrite_the_active_terminal_line(self):
-        stream = InteractiveBuffer()
-        renderer = CaptionConsoleRenderer(stream)
-
-        renderer.render("runtime-1", "Ada", "Initial", is_new=True)
-        renderer.render("runtime-1", "Ada", "Initial caption", is_new=False)
-        renderer.render("runtime-2", "Grace", "Next caption", is_new=True)
-        renderer.finish_line()
-
-        output = stream.getvalue()
-        self.assertNotIn("[NEW]", output)
-        self.assertNotIn("[UPD]", output)
-        self.assertIn("\r\033[2K", output)
-        self.assertIn("Ada: Initial caption", output)
-        self.assertIn("Grace: Next caption", output)
-        self.assertEqual(output.count("\n"), 2)
-
-    def test_noninteractive_logs_do_not_repeat_caption_updates(self):
-        stream = io.StringIO()
-        renderer = CaptionConsoleRenderer(stream)
-
-        renderer.render("runtime-1", "Ada", "Initial", is_new=True)
-        renderer.render("runtime-1", "Ada", "Initial caption", is_new=False)
-
-        output = stream.getvalue()
-        self.assertIn("Ada: Initial", output)
-        self.assertNotIn("Initial caption", output)
 
     def test_shared_watcher_delivers_incremental_changes(self):
         service = CaptionStreamService(self.db_path, poll_seconds=0.01)

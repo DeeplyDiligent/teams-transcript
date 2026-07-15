@@ -7,7 +7,6 @@ Uses SQLite for efficient storage and background thread for exports.
 import time
 import os
 import sqlite3
-import sys
 import threading
 import tracemalloc
 from datetime import datetime, timedelta
@@ -522,60 +521,14 @@ def extract_captions(live_captions_group):
     return captions
 
 
-class CaptionConsoleRenderer:
-    """Render the active caption in place on interactive terminals."""
-
-    def __init__(self, stream=None):
-        self.stream = stream or sys.stdout
-        self.active_runtime_id = None
-        self.line_open = False
-        self.lock = threading.Lock()
-
-    def render(self, runtime_id, speaker, text, is_new):
-        timestamp = datetime.now().strftime('%H:%M:%S')
-        line = f"[{timestamp}] [CAPTURE] {speaker}: {text}"
-
-        with self.lock:
-            if not self.stream.isatty():
-                if is_new:
-                    print(line, file=self.stream, flush=True)
-                return
-
-            if self.line_open and self.active_runtime_id != runtime_id:
-                print(file=self.stream)
-                self.line_open = False
-
-            if not self.line_open and not is_new:
-                self.active_runtime_id = runtime_id
-
-            print(
-                f"\r\033[2K{line}",
-                end="",
-                file=self.stream,
-                flush=True,
-            )
-            self.active_runtime_id = runtime_id
-            self.line_open = True
-
-    def finish_line(self):
-        with self.lock:
-            if self.line_open:
-                print(file=self.stream, flush=True)
-                self.line_open = False
-                self.active_runtime_id = None
-
-
-caption_console = CaptionConsoleRenderer()
-
-
-def log_caption_update(runtime_id, speaker, text, is_new=True):
-    """Render new caption text and subsequent updates on the same line."""
-    caption_console.render(runtime_id, speaker, text, is_new)
+def log_new_caption(speaker, text):
+    """Log a newly discovered caption."""
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    print(f"[{timestamp}] [CAPTURE] [NEW] {speaker}: {text}")
 
 
 def log_meeting_stats(db, meeting_id):
     """Log meeting statistics."""
-    caption_console.finish_line()
     stats = db.get_meeting_stats(meeting_id)
     timestamp = datetime.now().strftime('%H:%M:%S')
     print(f"[{timestamp}] [CAPTURE] Total: {stats['caption_count']} captions, {len(stats['participants'])} participants")
@@ -583,7 +536,6 @@ def log_meeting_stats(db, meeting_id):
 
 def _log_memory_usage():
     """Log current memory usage to console."""
-    caption_console.finish_line()
     timestamp = datetime.now().strftime('%H:%M:%S')
     parts = []
     if psutil:
@@ -932,12 +884,11 @@ def main():
                 if not changed:
                     continue
                 caption_data = current_captions[runtime_id]
-                log_caption_update(
-                    runtime_id,
-                    caption_data['speaker'],
-                    caption_data['text'],
-                    is_new=is_new,
-                )
+                if is_new:
+                    log_new_caption(
+                        caption_data['speaker'],
+                        caption_data['text'],
+                    )
                 new_or_changed += 1
             
             # Log stats every 30 seconds if there are changes
@@ -961,7 +912,6 @@ def main():
             time.sleep(0.25)
             
     except KeyboardInterrupt:
-        caption_console.finish_line()
         print("[CAPTURE] Stopping caption monitor...")
         
         # Stop export thread

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import ChatResponse from './ChatResponse'
 import useCaptionStream from '../hooks/useCaptionStream'
+import { getChatInputAction } from '../utils/chatInput'
 
 export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToList }) {
   const [meeting, setMeeting] = useState(null)
@@ -12,9 +13,37 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToLi
   const [chatInput, setChatInput] = useState('')
   const [isEditingName, setIsEditingName] = useState(false)
   const [editingName, setEditingName] = useState('')
+  const chatInputRef = useRef(null)
   const chatEndRef = useRef(null)
   const chatContainerRef = useRef(null)
   const shouldAutoScrollRef = useRef(true)
+
+  // Grow from one to three visible lines as text wraps or newlines are added.
+  useEffect(() => {
+    const input = chatInputRef.current
+    if (!input) return
+
+    const resizeInput = () => {
+      const styles = window.getComputedStyle(input)
+      const padding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom)
+      const borders = parseFloat(styles.borderTopWidth) + parseFloat(styles.borderBottomWidth)
+      const maxHeight = parseFloat(styles.lineHeight) * 3 + padding + borders
+      input.style.height = 'auto'
+      input.style.height = `${Math.min(input.scrollHeight + borders, maxHeight)}px`
+      input.style.overflowY = input.scrollHeight + borders > maxHeight ? 'auto' : 'hidden'
+    }
+
+    resizeInput()
+    let previousWidth = input.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (input.clientWidth !== previousWidth) {
+        previousWidth = input.clientWidth
+        resizeInput()
+      }
+    })
+    observer.observe(input)
+    return () => observer.disconnect()
+  }, [chatInput, loading, showTranscript])
 
   // Auto-scroll to bottom when messages change, but only if user is at bottom
   useEffect(() => {
@@ -190,6 +219,33 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToLi
       month: 'long', 
       day: 'numeric'
     })
+  }
+
+  const handleChatKeyDown = (e) => {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      || window.matchMedia('(hover: none) and (pointer: coarse)').matches
+    const action = getChatInputAction({
+      key: e.key,
+      keyCode: e.keyCode,
+      isComposing: e.nativeEvent.isComposing,
+      ctrlKey: e.ctrlKey,
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey,
+    }, isMobile)
+
+    if (action === 'newline') {
+      e.preventDefault()
+      const input = e.currentTarget
+      const { selectionStart, selectionEnd, value } = input
+      setChatInput(value.slice(0, selectionStart) + '\n' + value.slice(selectionEnd))
+      requestAnimationFrame(() => {
+        input.setSelectionRange(selectionStart + 1, selectionStart + 1)
+      })
+    } else if (action === 'send') {
+      e.preventDefault()
+      if (!e.repeat) e.currentTarget.form.requestSubmit()
+    }
   }
 
   const handleSendMessage = async (e) => {
@@ -581,7 +637,7 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToLi
 
       {/* Chat Input */}
       <div className="p-2 sm:p-4 bg-white border-t border-gray-200 flex-shrink-0">
-        <form onSubmit={handleSendMessage} className="flex gap-2 sm:gap-3">
+        <form onSubmit={handleSendMessage} className="flex items-end gap-2 sm:gap-3">
           <button
             type="button"
             onClick={clearChatHistory}
@@ -593,15 +649,19 @@ export default function TranscriptViewer({ meetingId, onShowLiveMode, onBackToLi
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
-          <input
-            type="text"
+          <textarea
+            ref={chatInputRef}
+            rows={1}
+            aria-label="Chat message"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={handleChatKeyDown}
             placeholder="Ask about this meeting..."
-            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm sm:text-base"
+            className="flex-1 min-w-0 resize-none px-3 sm:px-4 py-2 sm:py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-base leading-6"
           />
           <button
             type="submit"
+            aria-label="Send message"
             disabled={!chatInput.trim()}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 sm:gap-2 flex-shrink-0"
           >

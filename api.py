@@ -11,6 +11,7 @@ import sys
 import tracemalloc
 from flask import Flask, jsonify, send_from_directory, Response, request
 from flask_cors import CORS
+from dotenv import load_dotenv
 import sqlite3
 from datetime import datetime, timedelta
 from caption_stream import get_caption_stream_service
@@ -24,6 +25,10 @@ DB_PATH = 'transcripts.db'
 BACKUP_DIR = r'C:\GitHub\work-and-personal-notes-gdrive'
 BACKUP_FILENAME = 'transcripts-latest.db'
 BACKUP_INTERVAL_SECONDS = 30
+
+# Load local configuration before reading it, including when launched via main.py.
+# Match the PowerShell launchers: .env overrides inherited environment values.
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'), override=True)
 
 # AI Backend Configuration
 AI_BACKEND = os.getenv('AI_BACKEND', 'copilot')  # 'copilot' or 'azure'
@@ -401,7 +406,6 @@ Please provide helpful and detailed answers based on the transcript above. Make 
                         })
                         
                         def handle_event(event):
-                            print(f"[CHAT] Event: {event.type}")
                             if event.type == SessionEventType.ASSISTANT_REASONING_DELTA:
                                 reasoning = event.data.delta_content
                                 if reasoning:

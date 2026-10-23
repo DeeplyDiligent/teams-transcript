@@ -94,7 +94,7 @@ AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/openai/deployments/
 AZURE_OPENAI_KEY=your-api-key-here
 ```
 
-3. The `.env` file will be automatically loaded by `start.ps1`
+3. The app automatically loads `.env` from the repository root, including when started with `python main.py`. Values in `.env` override inherited environment variables.
 
 **To switch backends:** Simply change `AI_BACKEND=copilot` or `AI_BACKEND=azure` in your `.env` file and restart the application.
 

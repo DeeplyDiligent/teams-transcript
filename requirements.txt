@@ -6,7 +6,7 @@ pywinauto
 
 # AI Chat - Choose one backend:
 # 1. GitHub Copilot SDK (requires GitHub Copilot subscription)
-# github-copilot-sdk
+github-copilot-sdk
 
 # 2. Azure OpenAI (requires Azure OpenAI credentials)
 # No additional dependencies needed - uses requests library above

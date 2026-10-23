@@ -33,46 +33,37 @@ This architecture keeps database polling constant as browser count increases.
 For multi-host deployment, the `caption_changes` journal can be replaced by an
 external event broker without changing the frontend stream contract.
 
-## Setup
+## Getting started
 
 ### Prerequisites
 
-- Python 3.7+
-- Node.js 18+
-- pnpm
+- Windows with Microsoft Teams installed for live caption capture
+- Python 3
+- Node.js 20.19+ or 22.12+ with npm
 
-### Backend Setup
+### Install and build
 
-1. Install Python dependencies:
+From the repository root, install the Python dependencies and build the frontend:
+
 ```bash
 pip install -r requirements.txt
-```
-
-2. Start the Flask API:
-```bash
-python api.py
-```
-
-The API will run on `http://localhost:5000`
-
-### Frontend Setup
-
-1. Navigate to the frontend directory:
-```bash
 cd frontend
+npm install
+npm run build
+cd ..
 ```
 
-2. Install dependencies (if not already done):
+### Run the app
+
+From the repository root:
+
 ```bash
-pnpm install
+python main.py
 ```
 
-3. Start the development server:
-```bash
-pnpm run dev
-```
+Open `http://localhost:5000` in your browser. This starts both the API and live caption capture. Flask serves the built frontend, so you do not need a separate frontend development server.
 
-The app will run on `http://localhost:5173`
+For later runs, just use `python main.py`. Rebuild with `npm run build` in `frontend` after changing frontend code.
 
 ### AI Chat Configuration (Optional)
 
@@ -109,9 +100,9 @@ AZURE_OPENAI_KEY=your-api-key-here
 
 ## Usage
 
-1. Make sure you have transcript data in `transcripts.db` (captured using `capture_captions.py`)
-2. Start both the backend API and frontend development server
-3. Open `http://localhost:5173` in your browser
+1. Run `python main.py` from the repository root
+2. Join a Teams meeting and enable live captions to capture transcripts, or browse existing data in `transcripts.db`
+3. Open `http://localhost:5000` in your browser
 4. Select a meeting from the list to view its transcript
 5. Use the search box to filter captions
 
